@@ -1,4 +1,3 @@
-# public-portfolio
 
 This is a work-in-progress program.
 
