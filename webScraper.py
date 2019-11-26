@@ -13,6 +13,7 @@ import managerSQL
 
 pd.options.mode.chained_assignment = None
 
+
 # noinspection PyAttributeOutsideInit
 class WebScraper:
     def __init__(self):
