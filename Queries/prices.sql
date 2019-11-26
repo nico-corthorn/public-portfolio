@@ -1,6 +1,3 @@
--- Table: public.prices
-
--- DROP TABLE public.prices;
 
 CREATE TABLE public.prices_complete
 (
