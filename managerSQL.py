@@ -5,11 +5,11 @@ from sqlalchemy import create_engine
 
 
 class ManagerSQL:
-    def __init__(self):
-        db_name = 'portfolio'
-        user = 'XXXX'
-        password = 'XXXX'
-        port = '5432'
+    def __init__(self, sql_params):
+        db_name = sql_params['db_name']
+        user = sql_params['user']
+        password = sql_params['password']
+        port = sql_params['port']
 
         # Connexion for downloading data
         self.cnxn = psycopg2.connect(host="localhost", database=db_name, user=user, password=password)
@@ -23,6 +23,11 @@ class ManagerSQL:
         """ Returns table as DataFrame. """
         sql = 'select * from '+table
         df = pd.read_sql(sql, self.cnxn)
+        return df
+
+    def select_query(self, query):
+        """ Returns query output as DataFrame. """
+        df = pd.read_sql(query, self.cnxn)
         return df
 
     def select_column_list(self, column, table):
@@ -45,5 +50,5 @@ class ManagerSQL:
 
     def clean_table(self, table):
         """ Delete all information from the table. """
-        self.cursor.execute('delete from '+table)
-        self.cursor.commit()
+        self.cursor.execute('delete from ' + table)
+        self.cnxn.commit()

@@ -1,0 +1,31 @@
+{
+	"db":
+	{
+        "db_name": "portfolio",
+        "user": "postgres",
+        "password": "your_password",
+        "port": "5432"
+	},
+	"scrapers": 
+	{
+		"iex": 
+		{
+			"activate": false,
+			"api_key": "your_key"
+		},
+		"tiingo":
+		{
+			"activate": true,
+			"api_key": "your_key"
+		},
+		"sec":
+		{
+			"activate": true
+		}
+	},
+	"data_processing":
+	{
+		"activate": true,
+		"compute_pb": true
+	}
+}

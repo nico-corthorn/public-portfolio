@@ -16,9 +16,10 @@ pd.options.mode.chained_assignment = None
 
 # noinspection PyAttributeOutsideInit
 class WebScraper:
-    def __init__(self):
+    def __init__(self, scraper_config, sql_config):
+        self.scraper_config = scraper_config
         self.limit_reached = False
-        self.sql_manager = managerSQL.ManagerSQL()
+        self.sql_manager = managerSQL.ManagerSQL(sql_config)
         self.today = pd.datetime.today().date()
         self.last_business_date = (self.today - BDay(1)).date()
         self.min_date = pd.to_datetime('1960-01-01').date()
@@ -55,7 +56,7 @@ class IexScraper(WebScraper):
     def build(self):
         super().build()
         self.base_url = r'https://cloud.iexapis.com/stable/stock/'
-        self.api_key = 'XXXX'
+        self.api_key = self.scraper_config['api_key']
 
     def scrape(self, args):
         symbol = args[0]
@@ -116,7 +117,7 @@ class IexScraper(WebScraper):
 class TiingoScraper(WebScraper):
     def build(self):
         super().build()
-        self.api_key = 'XXXX'
+        self.api_key = self.scraper_config['api_key']
 
     def scrape(self, args):
         symbol = args[0]
@@ -150,10 +151,14 @@ class TiingoScraper(WebScraper):
 
 # noinspection PyAttributeOutsideInit
 class SecScraper(WebScraper):
-    def __init__(self):
-        super().__init__()
+    def build(self):
         self.sub_files = self.sql_manager.select_distinct_column_list('query', 'sec_sub')
-        # Clean?
+        df = self.sql_manager.select('sec_tags_main').iloc[:, :]
+        self.tags = {df.iloc[i, 0]: df.iloc[i, 1] for i in df.index}
+        self.col_bal = list(df[df.tab == 'bal']['col'])
+        self.col_res = list(df[df.tab == 'res']['col'])
+        self.col_shr = list(df[df.tab == 'shr']['col'])
+        self.elements = self.get_elements_to_download()
 
     def get_elements_to_download(self):
         now = datetime.now()
@@ -171,7 +176,6 @@ class SecScraper(WebScraper):
                     lst.append([period])
         if ['2009q1'] in lst:
             lst.remove(['2009q1'])
-        # lst = [['2011q3']]
         return lst
 
     def scrape(self, args):
@@ -187,8 +191,12 @@ class SecScraper(WebScraper):
                 zip_file.extractall()
                 sub_file = zip_file.open('sub.txt')
                 num_file = zip_file.open('num.txt')
-                sub_df = pd.read_csv(sub_file, sep='\t', encoding='ISO-8859-1')
-                num_df = pd.read_csv(num_file, sep='\t', encoding='ISO-8859-1')
+                sub_type = {'adsh': str, 'cik': int, 'name': str, 'sic': object, 'countryba': str, 'stprba': str,
+                            'fye': str, 'form': str, 'period': str, 'fy': object, 'fp': str, 'filed': str}
+                num_type = {'adsh': str, 'tag': str, 'version': str, 'ddate': str, 'qtrs': int, 'uom': str,
+                            'coreg': str, 'value': float}
+                sub_df = pd.read_csv(sub_file, sep='\t', encoding='ISO-8859-1', dtype=sub_type)
+                num_df = pd.read_csv(num_file, sep='\t', encoding='ISO-8859-1', dtype=num_type)
 
                 if period not in self.sub_files:
                     # Submission data set
@@ -240,20 +248,51 @@ class SecScraper(WebScraper):
         """
         adsh: Identifier of the submission.
         tag: Identifier (name) for an account.
-        version:
+        version: Accounting standard.
         ddate: End date for the data value, rounded to the nearest month end.
         qtrs: Number of quarters represented. 0 indicates a point-in-time value.
         uom: Unit of measure for the value (currency).
-        coreg:
+        coreg: Coregistrant of the parent company registrant.
         value: The value.
         """
         columns = ['adsh', 'tag', 'version', 'ddate', 'qtrs', 'uom', 'coreg', 'value']
         data = num_df[columns]
+        data = data[data.tag.isin(self.tags.keys())]
         data.dropna(subset=['adsh', 'version', 'tag', 'ddate', 'qtrs', 'uom', 'value'], inplace=True)
         values = {'ddate': str, 'qtrs': int, 'coreg': str}
         data = data.astype(values)
+        data_shr = data[data.uom == 'shares']
+        data_mon = data[data.uom != 'shares']
+        data_bal = data_mon[data_mon.qtrs == 0]
+        data_res = data_mon[data_mon.qtrs != 0]
+
+        # Pivot
+        index_bal = ['adsh', 'uom', 'ddate']
+        index_res = ['adsh', 'uom', 'ddate', 'qtrs']
+        index_shr = ['adsh', 'ddate', 'qtrs']
+        data_bal_pvt = data_bal.pivot_table(values='value', index=index_bal, columns='tag', aggfunc=np.mean)
+        data_res_pvt = data_res.pivot_table(values='value', index=index_res, columns='tag', aggfunc=np.mean)
+        data_shr_pvt = data_shr.pivot_table(values='value', index=index_shr, columns='tag', aggfunc=np.mean)
+        data_bal_pvt.rename(columns=self.tags, inplace=True)
+        data_res_pvt.rename(columns=self.tags, inplace=True)
+        data_shr_pvt.rename(columns=self.tags, inplace=True)
+        data_bal_pvt = data_bal_pvt.div(1000)
+        data_res_pvt = data_res_pvt.div(1000)
+        data_shr_pvt = data_shr_pvt.div(1000)
+        data_bal_pvt = data_bal_pvt[self.col_bal].reset_index()
+        data_res_pvt = data_res_pvt[self.col_res].reset_index()
+        data_shr_pvt = data_shr_pvt[self.col_shr].reset_index()
 
         # Upload data to db
-        self.sql_manager.upload_df('sec_num', data)
+        self.sql_manager.upload_df('sec_num_bal', data_bal_pvt)
+        self.sql_manager.upload_df('sec_num_res', data_res_pvt)
+        self.sql_manager.upload_df('sec_num_shr', data_shr_pvt)
 
         print('\tDownload successful for num {0}'.format(period))
+
+    def clean(self):
+        print('Cleaning SEC tables')
+        self.sql_manager.clean_table('sec_sub')
+        self.sql_manager.clean_table('sec_num_bal')
+        self.sql_manager.clean_table('sec_num_res')
+        self.sql_manager.clean_table('sec_num_shr')
