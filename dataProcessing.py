@@ -11,6 +11,8 @@ class DataProcessing:
     def __init__(self, params):
         self.params = params['data_processing']
         self.sql_manager = managerSQL.ManagerSQL(params['db'])
+        if self.params['clean']:
+            self.sql_manager.clean_table('prices_fundamentals')
         self.elements = self.get_elements()
         self.equity = self._get_equity()
         self.shares = self._get_shares()
@@ -42,53 +44,59 @@ class DataProcessing:
         """ Compute price to book value of symbol and upload to database. """
         t0 = datetime.now()
 
-        df_prices = self.sql_manager.select_query("select * from prices where symbol = '" + symbol + "'")
+        try:
+            df_prices = self.sql_manager.select_query("select * from prices where symbol = '" + symbol + "'")
 
-        if df_prices.shape[0] > 0:
-            df_equity = self.equity[self.equity.symbol == symbol].sort_values('ddate', ascending=False)
-            df_shares = self.shares[self.shares.symbol == symbol].sort_values('ddate', ascending=False)
-            df_prices['equity'] = np.nan
-            df_prices['shares'] = np.nan
+            if df_prices.shape[0] > 0:
+                df_equity = self.equity[self.equity.symbol == symbol].sort_values('ddate', ascending=False)
+                df_shares = self.shares[self.shares.symbol == symbol].sort_values('ddate', ascending=False)
+                df_prices['equity'] = np.nan
+                df_prices['shares'] = np.nan
 
-            # Equity
-            for row in df_equity.index:
-                ddate = df_equity.ddate[row]
-                equity = df_equity.equity[row]
-                df_prices.loc[(df_prices.date > ddate) & pd.isna(df_prices.equity), 'equity'] = equity
+                # Equity
+                for row in df_equity.index:
+                    ddate = df_equity.ddate[row]
+                    equity = df_equity.equity[row]
+                    df_prices.loc[(df_prices.date > ddate) & pd.isna(df_prices.equity), 'equity'] = equity
 
-            # Shares
-            for row in df_shares.index:
-                ddate = df_shares.ddate[row]
-                shares = df_shares.shares_basic[row]
-                df_prices.loc[(df_prices.date > ddate) & pd.isna(df_prices.shares), 'shares'] = shares
+                # Shares
+                for row in df_shares.index:
+                    ddate = df_shares.ddate[row]
+                    shares = df_shares.shares_basic[row]
+                    df_prices.loc[(df_prices.date > ddate) & pd.isna(df_prices.shares), 'shares'] = shares
 
-            # Market Price
-            # Adjust by dividends paid since last equity published...
-            df_prices['mcap'] = df_prices['close']*df_prices['shares']
+                # Market Price
+                # Adjust by dividends paid since last equity published...
+                df_prices['mcap'] = df_prices['close']*df_prices['shares']
 
-            # Price to Book Value
-            df_prices['pb'] = df_prices['mcap']/df_prices['equity']
+                # Price to Book Value
+                df_prices['pb'] = df_prices['mcap']/df_prices['equity']
 
-            # Momentum
-            df_prices_12m = df_prices.copy()
-            df_prices_1m = df_prices.copy()
-            cols = ['date', 'adjclose']
-            df_prices_12m = df_prices_12m[cols]
-            df_prices_1m = df_prices_1m[cols]
-            df_prices_12m['date'] = pd.to_datetime(df_prices_12m.date + BDay(260))
-            df_prices_1m['date'] = pd.to_datetime(df_prices_1m.date + BDay(20))
-            df_prices['date'] = pd.to_datetime(df_prices.date)
-            df_prices = df_prices.merge(df_prices_12m, left_on='date', right_on='date', how='left', suffixes=('', '_12m'))
-            df_prices = df_prices.merge(df_prices_1m, left_on='date', right_on='date', how='left', suffixes=('', '_1m'))
-            df_prices['mom'] = np.log(df_prices.adjclose_1m) - np.log(df_prices.adjclose_12m)
-            df_prices['mom'] = df_prices.mom.fillna(method='ffill', limit=5)
-            df_prices.drop(columns=['adjclose_12m', 'adjclose_1m'], inplace=True)
+                # Momentum
+                df_prices_12m = df_prices.copy()
+                df_prices_1m = df_prices.copy()
+                cols = ['date', 'adjclose']
+                df_prices_12m = df_prices_12m[cols]
+                df_prices_1m = df_prices_1m[cols]
+                df_prices_12m['date'] = pd.to_datetime(df_prices_12m.date + BDay(260))
+                df_prices_1m['date'] = pd.to_datetime(df_prices_1m.date + BDay(20))
+                df_prices['date'] = pd.to_datetime(df_prices.date)
+                df_prices = df_prices.merge(df_prices_12m, left_on='date', right_on='date', how='left', suffixes=('', '_12m'))
+                df_prices = df_prices.merge(df_prices_1m, left_on='date', right_on='date', how='left', suffixes=('', '_1m'))
+                df_prices['mom'] = np.log(df_prices.adjclose_1m) - np.log(df_prices.adjclose_12m)
+                df_prices['mom'] = df_prices.mom.fillna(method='ffill', limit=5)
+                df_prices.drop(columns=['adjclose_12m', 'adjclose_1m'], inplace=True)
 
-            # Upload data to db
-            self.sql_manager.upload_df('prices_fundamentals', df_prices)
+                # Upload data to db
+                self.sql_manager.upload_df('prices_fundamentals', df_prices)
 
-        t1 = datetime.now()
-        print('Processing successful for {0} ({1:.2f} sec)'.format(symbol, (t1 - t0).total_seconds()))
+            t1 = datetime.now()
+            print('Processing successful for {0} ({1:.2f} sec)'.format(symbol, (t1 - t0).total_seconds()))
+
+        except Exception as e:
+            t1 = datetime.now()
+            print('Processing failed for {0} ({1:.2f} sec)'.format(symbol, (t1 - t0).total_seconds()))
+            print(e)
 
     def _get_equity(self):
         query = \
