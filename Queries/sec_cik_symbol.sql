@@ -8,4 +8,4 @@ CREATE TABLE sec_cik_symbol
 )
 
 --COPY sec_cik_symbol(cik, symbol, name)
---FROM '\cik_ticker.csv' DELIMITER ',' CSV HEADER;
+--FROM '\sec_cik_symbol.csv' DELIMITER ',' CSV HEADER;
