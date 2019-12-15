@@ -32,7 +32,7 @@ def main():
         processor = dataProcessing.DataProcessing(params)
         processor.process()
 
-    # Outliers
+    # Outliers detection and removal
 
     # Regressions
 
