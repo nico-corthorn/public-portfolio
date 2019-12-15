@@ -86,9 +86,11 @@ class DataProcessing:
                 df_prices['mom'] = np.log(df_prices.adjclose_1m) - np.log(df_prices.adjclose_12m)
                 df_prices['mom'] = df_prices.mom.fillna(method='ffill', limit=5)
                 df_prices.drop(columns=['adjclose_12m', 'adjclose_1m'], inplace=True)
+                df_prices.dropna(inplace=True)
 
-                # Upload data to db
-                self.sql_manager.upload_df('prices_fundamentals', df_prices)
+                if df_prices.shape[0] > 0:
+                    # Upload data to db
+                    self.sql_manager.upload_df('prices_fundamentals', df_prices)
 
             t1 = datetime.now()
             print('Processing successful for {0} ({1:.2f} sec)'.format(symbol, (t1 - t0).total_seconds()))
