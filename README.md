@@ -10,7 +10,7 @@ The json file config needs to be created. It controls the process pipeline. It a
 
 The class ManagerSQL allows to handle information on a PostgreSQL local database. Only minor changes need to be made to make it work with MySQL. All the necessary queries and data to set up the database are provided in the folders Queries and Data.
 
-The class webScraper. Scrapes Tiingo for price and volume information, and scrapes SEC for fundamental information. The core functionality to scrape IEX is also provided, but the database setup expects only Tiingo information. The computation is done in parallel (per ticker) to gain important time savings.
+The class webScraper scrapes Tiingo for price and volume information, and scrapes SEC for fundamental information. The core functionality to scrape IEX is also provided, but the database setup expects only Tiingo information. The computation is done in parallel (per ticker) to gain important time savings.
 
 The class processData runs to separate processes. The first process runs in parallel for every ticker and calculates factor exposures (only the most basic ones for now). The second process runt in parallel for every date and detects outliers using robust stats and accounting for possible skewness in the data, and scales the data considering appropriate weights.
 
