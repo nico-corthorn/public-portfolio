@@ -12,5 +12,5 @@ The class _ManagerSQL_ allows to handle information on a PostgreSQL local databa
 
 The class _WebScraper_ scrapes Tiingo for price and volume information, and scrapes SEC for fundamental information. The core functionality to scrape IEX is also provided, but the database setup expects only Tiingo information. The computation is done in parallel (per ticker) to gain important time savings.
 
-The class _ProcessData_ runs to separate processes. The first process runs in parallel for every ticker and calculates factor exposures (only the most basic ones for now). This includes linking daily price information with periodic, unfrequent, often redundant, often missing, accounting reports. The second process runs in parallel for every date and detects outliers using robust stats and accounting for possible skewness in the data, and scales the data considering appropriate weights.
+The class _ProcessData_ runs two separate processes. The first process runs in parallel for every ticker and calculates factor exposures (only the most basic ones for now). This includes linking daily price information with periodic, unfrequent, often redundant, often missing, accounting reports. The second process runs in parallel for every date and detects outliers using robust stats and accounting for possible skewness in the data, and scales the data considering appropriate weights.
 
