@@ -2,6 +2,7 @@
 import json
 import webScraper
 import dataProcessing
+import regression
 
 
 def initialize_crawlers(params):
@@ -21,20 +22,21 @@ def main():
     with open('config.json') as json_file:
         params = json.load(json_file)
 
-    # Scrapers
+    # Scrape web: Prices, fundamentals
     crawlers = initialize_crawlers(params)
     for crawler in crawlers.values():
         crawler.build()
-        crawler.compute()
+        crawler.process()
 
-    # Data processing: Daily returns and factor exposures
+    # Data processing: Daily returns, factor exposures and outlier removal
     if params['data_processing']['activate']:
         processor = dataProcessing.DataProcessing(params)
-        processor.process_data()
-
-    # Outliers detection and removal
+        processor.process()
 
     # Regressions
+    if params['regression']['activate']:
+        reg = regression.Regression(params)
+        reg.process()
 
     # Forecast alpha
 

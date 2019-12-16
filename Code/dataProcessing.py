@@ -5,9 +5,11 @@ from concurrent import futures
 from datetime import datetime, timedelta
 from pandas.tseries.offsets import BDay
 import managerSQL
+from utilities import compute, compute_loop
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
 
 class DataProcessing:
     def __init__(self, params):
@@ -25,22 +27,11 @@ class DataProcessing:
         symbols = [s for s in symbols_all if s not in symbols_fund]
         return symbols
 
-    def process_data(self):
+    def process(self):
         """ Main execution of DataProcessing class. """
+        # Compute daily returns and factor exposures
         if self.params['compute_factors']:
-            self.compute(self.elements, self.compute_factors)
-
-    def compute(self, args, fun, max_workers=6):
-        """ General purpose parallel computing function. """
-        print("\nProcessing symbols in parallel")
-        ex = futures.ThreadPoolExecutor(max_workers=max_workers)
-        ex.map(fun, args)
-
-    def compute_loop(self, args, fun):
-        """ For debugging purposes. """
-        print("\nProcessing symbols one by one")
-        for symbol in args:
-            fun(symbol)
+            compute(self.elements, self.compute_factors)
 
     def compute_factors(self, symbol):
         """ Compute price to book value of symbol and upload to database. """
@@ -166,5 +157,3 @@ class DataProcessing:
             """
         df = self.sql_manager.select_query(query)
         return df
-
-

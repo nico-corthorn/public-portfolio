@@ -9,6 +9,7 @@ from pandas.tseries.offsets import BDay
 import pandas_datareader as pdr
 import zipfile
 import io
+from utilities import compute, compute_loop
 import managerSQL
 
 pd.options.mode.chained_assignment = None
@@ -35,16 +36,8 @@ class WebScraper:
         lst = df.reindex().values.tolist()
         return lst
 
-    def compute(self, max_workers=6):
-        ex = futures.ThreadPoolExecutor(max_workers=max_workers)
-        args = self.elements
-        ex.map(self.scrape, args)
-
-    def compute_loop(self):
-        """ For debugging purposes. """
-        args = self.elements
-        for arg in args:
-            self.scrape(arg)
+    def process(self):
+        compute(self.elements, self.scrape)
 
     def scrape(self, args):
         """ Overwrite this method with child class definition. """

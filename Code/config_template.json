@@ -27,6 +27,13 @@
 	{
 		"activate": true,
 		"clean": false,
-		"compute_factors": true
+		"compute_factors": true,
+		"scale_factors": true
+	},
+	"regression":
+	{
+		"activate": true,
+		"start_date": "2005-01-02",
+		"end_date": "2018-12-31"
 	}
 }
