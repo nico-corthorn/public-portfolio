@@ -8,7 +8,7 @@ File _main_ is the program to run, as it will call everything else.
 
 The json file _config_ needs to be created. It controls the process pipeline. It also contains all the necessary passwords, as the database password and API keys for scraping. This file was unversioned for obvious reasons. File _config_template_ was provided as a guide.
 
-The class :ManagerSQL_ allows to handle information on a PostgreSQL local database. Only minor changes need to be made to make it work with MySQL. All the necessary queries and data to set up the database are provided in the folders Queries and Data.
+The class _ManagerSQL_ allows to handle information on a PostgreSQL local database. Only minor changes need to be made to make it work with MySQL. All the necessary queries and data to set up the database are provided in the folders Queries and Data.
 
 The class _WebScraper_ scrapes Tiingo for price and volume information, and scrapes SEC for fundamental information. The core functionality to scrape IEX is also provided, but the database setup expects only Tiingo information. The computation is done in parallel (per ticker) to gain important time savings.
 
