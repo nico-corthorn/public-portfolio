@@ -1,11 +1,13 @@
 
 import pandas as pd
 import numpy as np
-from concurrent import futures
 from datetime import datetime, timedelta
 from pandas.tseries.offsets import BDay
-import managerSQL
+from statsmodels.stats.stattools import medcouple
+from pandas.tseries.offsets import CustomBusinessDay
+from pandas.tseries.holiday import USFederalHolidayCalendar
 from utilities import compute, compute_loop
+import managerSQL
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -15,11 +17,19 @@ class DataProcessing:
     def __init__(self, params):
         self.params = params['data_processing']
         self.sql_manager = managerSQL.ManagerSQL(params['db'])
-        if self.params['clean']:
-            self.sql_manager.clean_table('reg_factors')
-        self.elements = self.get_elements()
-        self.equity = self._get_equity()
-        self.shares = self._get_shares()
+        if self.params['compute_raw_factors']:
+            if self.params['clean_raw_factors']:
+                self.sql_manager.clean_table('reg_factors')
+            self.elements = self.get_elements()
+            self.equity = self._get_equity()
+            self.shares = self._get_shares()
+        if self.params['scale_factors']:
+            if self.params['clean_scaled_factors']:
+                #self.sql_manager.clean_table('reg_factors')
+                pass
+            self.start_date = self.params['start_date']
+            self.end_date = self.params['end_date']
+            self.dates = self.get_dates()
 
     def get_elements(self):
         symbols_all = self.sql_manager.select_column_list('symbol', 'symbols')
@@ -27,13 +37,21 @@ class DataProcessing:
         symbols = [s for s in symbols_all if s not in symbols_fund]
         return symbols
 
+    def get_dates(self):
+        cal = CustomBusinessDay(calendar=USFederalHolidayCalendar())
+        return pd.DatetimeIndex(start=self.start_date, end=self.end_date, freq=cal)
+
     def process(self):
         """ Main execution of DataProcessing class. """
         # Compute daily returns and factor exposures
-        if self.params['compute_factors']:
-            compute(self.elements, self.compute_factors)
+        if self.params['compute_raw_factors']:
+            compute(self.elements, self.compute_raw_factors)
 
-    def compute_factors(self, symbol):
+        # Scale factors
+        if self.params['scale_factors']:
+            compute(self.dates, self.process_cross_section)
+
+    def compute_raw_factors(self, symbol):
         """ Compute price to book value of symbol and upload to database. """
         t0 = datetime.now()
 
@@ -156,4 +174,59 @@ class DataProcessing:
             order by symbol, ddate 
             """
         df = self.sql_manager.select_query(query)
+        return df
+
+    def process_cross_section(self, date):
+        t0 = datetime.now()
+        date_str = str(date.date())
+
+        try:
+            query = "select * from reg_factors where date = '" + date_str + "'"
+            df = self.sql_manager.select_query(query)
+
+            if df.shape[0] > 0:
+                if 'equity' in df.columns:
+                    df.drop(columns=['equity'], inplace=True)
+
+                # Outliers
+                df['weight'] = 1
+                df = self.remove_outliers(df, a=3)
+
+                # Scaling
+                df = self.scale_factors(df, cols=['mcap', 'pb', 'mom'])
+
+                # Upload data to db
+                self.sql_manager.upload_df('reg_factors_scaled', df)
+
+            t1 = datetime.now()
+            print('Processing successful for {0} ({1:.2f} sec)'.format(date_str, (t1 - t0).total_seconds()))
+
+        except Exception as e:
+            t1 = datetime.now()
+            print('Processing failed for {0} ({1:.2f} sec)'.format(date_str, (t1 - t0).total_seconds()))
+            print(e)
+
+    def scale_factors(self, df, cols):
+        w = df.weight / df.weight.sum()
+        mu = df[cols].mul(w, axis=0).sum(axis=0)
+        delta = df[cols] - mu
+        std = delta.mul(delta, axis=0).mul(w, axis=0).sum(axis=0).apply(np.sqrt)
+        df[cols] = delta.div(std, axis=1)
+        return df
+
+    def remove_outliers(self, df, a=1.5, n_sample=10000):
+        """ Based on https://wis.kuleuven.be/stat/robust/papers/2008/outlierdetectionskeweddata-revision.pdf"""
+        mc = medcouple(df.ret)
+        percentiles = np.percentile(df.ret, [25, 75])
+        q1 = percentiles[0]
+        q3 = percentiles[1]
+        iqr = q3 - q1
+        if mc > 0:
+            lo = q1 - a * np.exp(-4 * mc) * iqr
+            up = q3 + a * np.exp(3 * mc) * iqr
+        else:
+            lo = q1 - a * np.exp(-3 * mc) * iqr
+            up = q3 + a * np.exp(4 * mc) * iqr
+        df.loc[df.ret < lo, 'weight'] = 0
+        df.loc[df.ret > up, 'weight'] = 0
         return df

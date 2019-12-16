@@ -4,7 +4,6 @@ import numpy as np
 from datetime import datetime
 import requests
 import json
-from concurrent import futures
 from pandas.tseries.offsets import BDay
 import pandas_datareader as pdr
 import zipfile
