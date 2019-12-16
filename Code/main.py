@@ -27,7 +27,7 @@ def main():
         crawler.build()
         crawler.compute()
 
-    # Data processing
+    # Data processing: Daily returns and factor exposures
     if params['data_processing']['activate']:
         processor = dataProcessing.DataProcessing(params)
         processor.process_data()

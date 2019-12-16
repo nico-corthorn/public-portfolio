@@ -26,6 +26,7 @@
 	"data_processing":
 	{
 		"activate": true,
-		"compute_pb": true
+		"clean": false,
+		"compute_factors": true
 	}
 }
