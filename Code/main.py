@@ -40,7 +40,7 @@ def main():
 
     # Forecast alpha
 
-    # Forecast risk
+    # Forecast risk (covariance matrix and specific risk)
 
     # Optimizers
 
