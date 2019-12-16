@@ -1,8 +1,8 @@
-Overview
+**Overview**
 
 This program scrapes US stock market information, computes factor exposures, detects outliers, scales the factors appropriately. The next step is to write the code for computing cross-sectional regressions. The final steps will be to forecast alpha and risk, in order to give as inputs to an optimization model.
 
-The code is structured as follows:
+**Code structure**
 
 File main is the program to run, as it will call everything else.
 
