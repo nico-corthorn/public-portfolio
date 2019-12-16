@@ -6,29 +6,31 @@ from datetime import datetime, timedelta
 from pandas.tseries.offsets import BDay
 import managerSQL
 
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 class DataProcessing:
     def __init__(self, params):
         self.params = params['data_processing']
         self.sql_manager = managerSQL.ManagerSQL(params['db'])
         if self.params['clean']:
-            self.sql_manager.clean_table('prices_fundamentals')
+            self.sql_manager.clean_table('reg_factors')
         self.elements = self.get_elements()
         self.equity = self._get_equity()
         self.shares = self._get_shares()
 
     def get_elements(self):
         symbols_all = self.sql_manager.select_column_list('symbol', 'symbols')
-        symbols_fund = self.sql_manager.select_distinct_column_list('symbol', 'prices_fundamentals')
+        symbols_fund = self.sql_manager.select_distinct_column_list('symbol', 'reg_factors')
         symbols = [s for s in symbols_all if s not in symbols_fund]
         return symbols
 
-    def process(self):
+    def process_data(self):
         """ Main execution of DataProcessing class. """
         if self.params['compute_factors']:
-            self.compute_loop(self.elements, self.compute_factors)
+            self.compute(self.elements, self.compute_factors)
 
-    def compute_parallel(self, args, fun, max_workers=6):
+    def compute(self, args, fun, max_workers=6):
         """ General purpose parallel computing function. """
         print("\nProcessing symbols in parallel")
         ex = futures.ThreadPoolExecutor(max_workers=max_workers)
@@ -48,18 +50,30 @@ class DataProcessing:
             df_prices = self.sql_manager.select_query("select * from prices where symbol = '" + symbol + "'")
 
             if df_prices.shape[0] > 0:
-                df_equity = self.equity[self.equity.symbol == symbol].sort_values('ddate', ascending=False)
-                df_shares = self.shares[self.shares.symbol == symbol].sort_values('ddate', ascending=False)
-                df_prices['equity'] = np.nan
-                df_prices['shares'] = np.nan
+
+                # Returns
+                df_prices_1d = df_prices.copy()
+                cols = ['date', 'adjclose']
+                df_prices_1d = df_prices_1d[cols]
+                df_prices_1d['date'] = (df_prices_1d.date + BDay(1)).dt.date
+                s1d = ('', '_1d')
+                df_prices = df_prices.merge(df_prices_1d, left_on='date', right_on='date', how='left', suffixes=s1d)
+                df_prices['ret'] = np.log(df_prices.adjclose) - np.log(df_prices.adjclose_1d)
+                df_prices.drop(columns=['adjclose_1d'], inplace=True)
+                col_remains = ['symbol', 'date', 'ret']
 
                 # Equity
+                df_equity = self.equity[self.equity.symbol == symbol].sort_values('ddate', ascending=False)
+                df_prices['equity'] = np.nan
                 for row in df_equity.index:
                     ddate = df_equity.ddate[row]
                     equity = df_equity.equity[row]
                     df_prices.loc[(df_prices.date > ddate) & pd.isna(df_prices.equity), 'equity'] = equity
+                col_remains.append('equity')
 
                 # Shares
+                df_shares = self.shares[self.shares.symbol == symbol].sort_values('ddate', ascending=False)
+                df_prices['shares'] = np.nan
                 for row in df_shares.index:
                     ddate = df_shares.ddate[row]
                     shares = df_shares.shares_basic[row]
@@ -67,10 +81,12 @@ class DataProcessing:
 
                 # Market Price
                 # Adjust by dividends paid since last equity published...
-                df_prices['mcap'] = df_prices['close']*df_prices['shares']
+                df_prices['mcap'] = df_prices['close'].multiply(df_prices['shares'])
+                col_remains.append('mcap')
 
                 # Price to Book Value
-                df_prices['pb'] = df_prices['mcap']/df_prices['equity']
+                df_prices['pb'] = df_prices['mcap'].divide(df_prices['equity'])
+                col_remains.append('pb')
 
                 # Momentum
                 df_prices_12m = df_prices.copy()
@@ -78,19 +94,24 @@ class DataProcessing:
                 cols = ['date', 'adjclose']
                 df_prices_12m = df_prices_12m[cols]
                 df_prices_1m = df_prices_1m[cols]
-                df_prices_12m['date'] = pd.to_datetime(df_prices_12m.date + BDay(260))
-                df_prices_1m['date'] = pd.to_datetime(df_prices_1m.date + BDay(20))
-                df_prices['date'] = pd.to_datetime(df_prices.date)
-                df_prices = df_prices.merge(df_prices_12m, left_on='date', right_on='date', how='left', suffixes=('', '_12m'))
-                df_prices = df_prices.merge(df_prices_1m, left_on='date', right_on='date', how='left', suffixes=('', '_1m'))
+                df_prices_12m['date'] = (df_prices_12m.date + BDay(260)).dt.date
+                df_prices_1m['date'] = (df_prices_1m.date + BDay(20)).dt.date
+                s12m = ('', '_12m')
+                s1m = ('', '_1m')
+                df_prices = df_prices.merge(df_prices_12m, left_on='date', right_on='date', how='left', suffixes=s12m)
+                df_prices = df_prices.merge(df_prices_1m, left_on='date', right_on='date', how='left', suffixes=s1m)
                 df_prices['mom'] = np.log(df_prices.adjclose_1m) - np.log(df_prices.adjclose_12m)
                 df_prices['mom'] = df_prices.mom.fillna(method='ffill', limit=5)
                 df_prices.drop(columns=['adjclose_12m', 'adjclose_1m'], inplace=True)
+                col_remains.append('mom')
+
+                # Clean
+                df_prices = df_prices[col_remains]
                 df_prices.dropna(inplace=True)
 
                 if df_prices.shape[0] > 0:
                     # Upload data to db
-                    self.sql_manager.upload_df('prices_fundamentals', df_prices)
+                    self.sql_manager.upload_df('reg_factors', df_prices)
 
             t1 = datetime.now()
             print('Processing successful for {0} ({1:.2f} sec)'.format(symbol, (t1 - t0).total_seconds()))

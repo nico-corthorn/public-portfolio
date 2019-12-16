@@ -30,7 +30,7 @@ def main():
     # Data processing
     if params['data_processing']['activate']:
         processor = dataProcessing.DataProcessing(params)
-        processor.process()
+        processor.process_data()
 
     # Outliers detection and removal
 
