@@ -44,9 +44,22 @@ class ManagerSQL:
         lst = [element for element in df[column]]
         return lst
 
+    def select_as_dictionary(self, column_key, column_value, table):
+        """ Return dictionary column_key: column_value, column_key must have unique values. """
+        sql = 'select '+column_key+', '+column_value+' from '+table
+        df = pd.read_sql(sql, self.cnxn)
+        assert df[column_key].is_unique, "Column "+column_key+" doesn't have unique values."
+        return df.set_index(column_key).to_dict()[column_value]
+
     def upload_df(self, table, df):
         """ Uploads data frame to table. Appends information. """
         df.to_sql(name=table, con=self.con, if_exists='append', index=False)
+
+    def query(self, query):
+        """ Executes query. Doesn't return anything.
+            Intended for customized delete queries. """
+        self.cursor.execute(query)
+        self.cnxn.commit()
 
     def clean_table(self, table):
         """ Delete all information from the table. """
